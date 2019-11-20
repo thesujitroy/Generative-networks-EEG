@@ -1,0 +1,144 @@
+from math import ceil
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras.datasets.mnist import load_data
+import tensorflow.keras.optimizers as optimizers
+import tensorflow.keras.layers as layers
+
+
+def get_nth_batch(n, batch_sz, n_samples):
+    if ((n + 1) * batch_sz) <= n_samples:
+        b = list(range(n*batch_sz, (n+1)*batch_sz))
+    else:
+        missing_samples = (n*batch_sz) + 256 - n_samples
+        b = list(range(n*batch_sz, n_samples)) + list(range(missing_samples))
+
+    return b
+
+
+def get_shuffled_batch(batch_sz, n_samples):
+    b = np.random.permutation(n_samples)[:batch_sz]
+    return b
+
+
+def build_generator(gan_input):
+    model = tf.keras.Sequential()
+
+    model.add(layers.Dense(10*8*256, use_bias=False, input_shape=gan_input))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    model.add(layers.Reshape((10, 8, 256)))
+    model.add(layers.Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    model.add(layers.Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU())
+
+    model.add(layers.Conv2DTranspose(3, (5, 5), strides=(2, 2), padding='same', use_bias=False, activation='tanh'))
+    assert model.output_shape == (None, 40, 32, 3)
+
+    return model
+
+
+def build_discriminator(disc_input):
+    model = tf.keras.Sequential()
+    model.add(layers.Conv2D(64, (5, 5), strides=(2, 2), padding='same',
+                            input_shape=disc_input))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Conv2D(128, (5, 5), strides=(2, 2), padding='same'))
+    model.add(layers.LeakyReLU())
+    model.add(layers.Dropout(0.3))
+
+    model.add(layers.Flatten())
+    model.add(layers.Dense(1))
+
+    return model
+
+
+def discriminator_loss(cross_entropy, real_output, fake_output):
+    real_loss = cross_entropy(tf.ones_like(real_output), real_output)
+    fake_loss = cross_entropy(tf.zeros_like(fake_output), fake_output)
+    total_loss = real_loss + fake_loss
+
+    return total_loss
+
+
+def generator_loss(cross_entropy, fake_output):
+    return cross_entropy(tf.ones_like(fake_output), fake_output)
+
+
+def begin():
+    buffer_sz = 2200
+    noise_dim = 100
+    batch_sz = 64
+
+    # load data
+    train_images = np.load('train_data.npy').astype(np.float32)
+    train_labels = np.load('train_labels.npy')
+    cls0_samples = np.where(train_labels == 0)[0]
+    train_images = train_images[cls0_samples, :, :, :]
+    train_images = (train_images - 0.5) / 0.5
+    train_dataset = tf.data.Dataset.from_tensor_slices(train_images).shuffle(buffer_sz).batch(batch_sz)
+
+    # create the generator and discriminator
+    generator = build_generator((noise_dim,))
+    discriminator = build_discriminator((40, 32, 3))
+
+    # loss function
+    cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
+    # create optimizers
+    generator_opt = optimizers.Adam(1e-4)
+    discriminator_opt = optimizers.Adam(1e-4)
+
+    # generate images from generator to evaluate quality of generated images
+    n_example_to_generate = 16
+    generator_seed = tf.random.normal([n_example_to_generate, noise_dim])
+
+    n_epoch = 50
+    # n_batch = ceil(train_images.shape[0] / batch_sz)
+    for e in range(n_epoch):
+        for x in train_dataset:
+            noise = np.random.normal(size=[batch_sz, noise_dim]).astype(np.float32)
+
+            with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+                generated_images = generator(noise, training=True)
+
+                real_output = discriminator(x, training=True)
+                fake_output = discriminator(generated_images, training=True)
+
+                gen_loss = generator_loss(cross_entropy, fake_output)
+                disc_loss = discriminator_loss(cross_entropy, real_output, fake_output)
+
+            gradients_of_generator = gen_tape.gradient(gen_loss, generator.trainable_variables)
+            gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+
+            generator_opt.apply_gradients(zip(gradients_of_generator, generator.trainable_variables))
+            discriminator_opt.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
+
+        # check generated images
+        predictions = generator.predict_on_batch(generator_seed)
+
+        fig = plt.figure(figsize=(4, 4))
+        for i in range(predictions.shape[0]):
+            plt.subplot(4, 4, i + 1)
+            plt.imshow(predictions[i, :, :, 0] * 0.5 + 0.5)
+            plt.axis('off')
+
+        print('Epoch: %d' % e)
+        plt.savefig('image_at_epoch_{:04d}.png'.format(e))
+        plt.show()
+
+    generator.save('generator.h5')
+    discriminator.save('discriminator.h5')
+    print('Done...')
+
+
+if __name__ == '__main__':
+    begin()
