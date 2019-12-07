@@ -83,7 +83,7 @@ def cnn_model(x_train_data, keep_rate=0.7, seed=None):
         dropout = tf.layers.dropout(inputs=dense, rate=keep_rate, training=True)
 
     with tf.name_scope("y_conv"):
-        y_conv = tf.layers.dense(inputs=dropout, units=10)
+        y_conv = tf.layers.dense(inputs=dropout, units=4)
 
     return y_conv
 
