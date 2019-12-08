@@ -138,8 +138,10 @@ def train_neural_network(x_train_data, y_train_data, x_test_data, y_test_data, l
 if __name__ == "__main__":
    trainingdata, traininglabels, Xval, Yval =  load_data()
    x_train = np.asarray(trainingdata)
+   x_train = x_train.astype(dtype = 'float64')
    x_test = np.asarray(Xval)
+   x_test = x_test.astype(dtype = 'float64')
    y_train = np.asarray(traininglabels)
    y_test = np.asarray(Yval)
 
-   cnn_model()
+   cnn_model(x_train)
