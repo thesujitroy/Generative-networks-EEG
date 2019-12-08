@@ -77,17 +77,17 @@ def cnn_model(x_train_data, keep_rate=0.7, seed=None):
         cnn3d_bn = tf.layers.batch_normalization(inputs=pool6, training=True)
 
     with tf.name_scope("fully_con"):
-        flattening = tf.reshape(cnn3d_bn, [-1, 4*4*4*128])
-        dense = tf.layers.dense(inputs=flattening, units=1024, activation=tf.nn.relu)
+        flattening = tf.reshape(cnn3d_bn, [-1, 5*45*49*128])
+        dense = tf.layers.dense(inputs=flattening, units=2048, activation=tf.nn.relu)
         # (1-keep_rate) is the probability that the node will be kept
         dropout = tf.layers.dropout(inputs=dense, rate=keep_rate, training=True)
 
     with tf.name_scope("y_conv"):
-        y_conv = tf.layers.dense(inputs=dropout, units=4)
+        y_conv = tf.layers.dense(inputs=dropout, units=2)
 
     return y_conv
 
-def train_neural_network(x_train_data, y_train_data, x_test_data, y_test_data, learning_rate=0.05, keep_rate=0.7, epochs=10, batch_size=128):
+def train_neural_network(x_train_data, y_train_data, x_test_data, y_test_data, learning_rate=0.05, keep_rate=0.7, epochs =10, batch_size=32):
 
 
     with tf.name_scope("cross_entropy"):
@@ -95,15 +95,15 @@ def train_neural_network(x_train_data, y_train_data, x_test_data, y_test_data, l
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=y_input))
 
     with tf.name_scope("training"):
-        optimizer = tf.train.AdamOptimizer(learning_rate).minimize(cost)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate).minimize(cost)
 
     correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(y_input, 1))
     accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
 
     iterations = int(len(x_train_data)/batch_size) + 1
 
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
+    with tf.compat.v1.Session() as sess:
+        sess.run(tf.compat.v1.global_variables_initializer())
         import datetime
 
         start_time = datetime.datetime.now()
@@ -138,10 +138,11 @@ def train_neural_network(x_train_data, y_train_data, x_test_data, y_test_data, l
 if __name__ == "__main__":
    trainingdata, traininglabels, Xval, Yval =  load_data()
    x_train = np.asarray(trainingdata)
-   x_train = x_train.astype(dtype = 'float64')
+   x_train = x_train.astype(dtype = 'float32')
    x_test = np.asarray(Xval)
-   x_test = x_test.astype(dtype = 'float64')
+   x_test = x_test.astype(dtype = 'float32')
    y_train = np.asarray(traininglabels)
    y_test = np.asarray(Yval)
 
-   cnn_model(x_train)
+   #cnn_model(x_train)
+   train_neural_network(x_train, y_train, x_test, y_test, epochs=10, batch_size=32, learning_rate=0.0001)
